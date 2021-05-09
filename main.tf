@@ -74,7 +74,7 @@ resource "aws_lambda_function" "callback" {
           client_secret_parameter_name = config.client_secret_parameter_name
           parameter_name               = aws_ssm_parameter.secret[service_name].name
           identity_field               = config.identity_field
-          identify_with_openid         = config.identify_with_openid
+          identify_with_openid         = config.identify_with_openid == true
           permitted_identities         = config.permitted_identities
           token_endpoint               = config.token_endpoint
           token_endpoint_auth_method   = config.token_endpoint_auth_method
@@ -112,7 +112,7 @@ module "services" {
   authorization_endpoint = each.value.authorization_endpoint
   token_endpoint         = each.value.token_endpoint
   permitted_identities   = each.value.permitted_identities
-  identify_with_openid   = each.value.identify_with_openid
+  identify_with_openid   = each.value.identify_with_openid == true
   parameter_prefix       = local.parameter_prefix
 
   api_id             = aws_apigatewayv2_api.interface.id
