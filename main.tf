@@ -115,6 +115,10 @@ module "services" {
   identify_with_openid   = each.value.identify_with_openid == true
   parameter_prefix       = local.parameter_prefix
 
+  # Not used except to validate the values.
+  secret_parameter           = each.value.secret_parameter
+  token_endpoint_auth_method = each.value.token_endpoint_auth_method
+
   api_id             = aws_apigatewayv2_api.interface.id
   api_integration_id = aws_apigatewayv2_integration.callback.id
   api_endpoint       = aws_apigatewayv2_api.interface.api_endpoint

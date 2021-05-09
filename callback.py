@@ -1,12 +1,14 @@
 import base64
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from hmac import compare_digest
 import json
 from os import environ
 import time
-from typing import FrozenSet
+from typing import Any, FrozenSet
 from urllib.parse import urlparse
+import weakref
 
 import boto3
 import requests
@@ -15,7 +17,50 @@ region = environ.get('AWS_REGION')
 ssm_client = boto3.client('ssm', region_name=region)
 
 cors_headers = frozenset({'access-control-request-method', 'access-control-request-headers'})
-desired_headers = frozenset({*cors_headers, 'origin', 'host'})
+desired_headers = frozenset({*cors_headers, 'origin', 'host', 'x-forwarded-proto'})
+
+
+def auth_header(req, service_config, client_secret):
+    auth_value = base64.b64encode(f'{service_config.client_id}:{client_secret}'.encode())
+    req['headers']['authorization'] = f'Basic {auth_value.decode()}'
+
+
+def auth_param(req, service_config, client_secret):
+    req['data']['client_secret'] = client_secret
+
+
+class AuthMethod(Enum):
+    def __new__(cls, key, fn):
+        obj = object.__new__(cls)
+        obj._value_ = key
+        obj.attach = fn
+        return obj
+
+    HEADER = ('header', auth_header)
+    PARAMETER = ('parameter', auth_param)
+
+
+def memoize_with_timeout(timeout_sec):
+    def inner(fn):
+        expiry_mapping = weakref.WeakKeyDictionary()
+
+        def reset(key: Any):
+            if key in expiry_mapping:
+                del expiry_mapping[key]
+
+        def get(key: Any):
+            value = expiry_mapping.get(key)
+            now = time.monotonic()
+            if value is not None and now < value[0]:
+                return value[1]
+            value = fn(key)
+            expiry_mapping[key] = now + timeout_sec, value
+            return value
+
+        get.reset = reset
+        return get
+
+    return inner
 
 
 @dataclass(frozen=True)
@@ -28,12 +73,11 @@ class ServiceConfig(object):
     identify_with_openid: bool
     permitted_identities: FrozenSet[str]
     token_endpoint: str
-    # TODO: enum?
-    token_endpoint_auth_method: str
+    token_endpoint_auth_method: AuthMethod
 
     redirect_uri: str
 
-    # @memoized
+    @memoize_with_timeout(timeout_sec=60)
     def get_secret(self):
         return json.loads(
             ssm_client.get_parameter(Name=self.secret_parameter,
@@ -45,7 +89,9 @@ services = {
     name: ServiceConfig(
         service_name=name,
         **{
-            **config, "permitted_identities": frozenset(config['permitted_identities'])
+            **config,
+            'permitted_identities': frozenset(config['permitted_identities']),
+            'token_endpoint_auth_method': AuthMethod(config['token_endpoint_auth_method']),
         }
     )
     for name, config in json.loads(environ.get('SERVICES')).items()
@@ -75,6 +121,10 @@ def lambda_handler(event, context):
         name.lower(): value
         for name, value in event['headers'].items() if name.lower() in desired_headers
     }
+
+    if headers.get('x-forwarded-proto') != 'https':
+        return res(403, 'Unsupported protocol')
+
     # Use 'null' because it's an actual possible value for the header and simplifies the next check.
     origin = headers.get('origin') or 'null'
     unexpected_origin = origin != 'null' and origin != headers.get('host')
@@ -108,7 +158,7 @@ def lambda_handler(event, context):
             and not compare_digest(service_config.client_id.encode(), provided_client_id.encode())):
         return res(403, 'Wrong client_id')
 
-    client_secret = service_config.get_secret()["client_secret"]
+    client_secret = service_config.get_secret()['client_secret']
     token_request = dict(
         headers={},
         data=dict(
@@ -118,18 +168,13 @@ def lambda_handler(event, context):
             grant_type='authorization_code',
         )
     )
-    if service_config.token_endpoint_auth_method == 'parameter':
-        token_request['data']['client_secret'] = client_secret
-    elif service_config.token_endpoint_auth_method == 'header':
-        auth_value = base64.b64encode(f'{service_config.client_id}:{client_secret}'.encode())
-        token_request['headers']['authorization'] = f'Basic {auth_value.decode()}'
-    else:
-        print(f'service {service_name} did not define a valid token_endpoint_auth_method')
-        return res(500, 'Internal server error')
+    service_config.token_endpoint_auth_method.attach(token_request, service_config, client_secret)
 
     # request_start = datetime.now(tz=timezone.utc)
     response = requests.post(service_config.token_endpoint, **token_request)
     if not response.ok:
+        if response.status_code in {401, 403}:
+            ServiceConfig.get_secret.reset(service_config)
         try:
             data = response.json()
             if data.get('error') == 'invalid_grant':
@@ -173,7 +218,7 @@ def lambda_handler(event, context):
     refresh_token = data.get('refresh_token')
     if not refresh_token:
         if not access_token:
-            return res(500, 'No access tokens returned by service provider')
+            return res(500, 'No authorization tokens returned by service provider')
         return res(500, 'Failed to get durable access to service')
     token_type = data.get('token_type')
     if token_type != 'Bearer':
@@ -181,7 +226,6 @@ def lambda_handler(event, context):
 
     # expires_at = datetime.timestamp(request_start + timedelta(seconds=data.get('expires_in', 3600)))
     param_name = service_config.parameter_name
-    # TODO: will this overwrite the description?
     result = ssm_client.put_parameter(
         Name=param_name,
         Value=json.dumps(dict(refresh_token=refresh_token)),

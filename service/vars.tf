@@ -43,6 +43,23 @@ variable "client_id" {
   }
 }
 
+# Unused in the module, just here for validation.
+variable "secret_parameter" {
+  type = string
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9_./-]*$", var.secret_parameter))
+    error_message = "Parameter names can only contain the characters `a-zA-Z0-9_./-`."
+  }
+}
+
+variable "token_endpoint_auth_method" {
+  type = string
+  validation {
+    condition     = contains(["parameter", "header"], var.token_endpoint_auth_method)
+    error_message = "The mechanism by which the token endpoint authorizes requests must be defined in token_endpoint_auth_method as one of {\"parameter\", \"header\"}."
+  }
+}
+
 variable "extra_params" {
   type    = map(string)
   default = {}
