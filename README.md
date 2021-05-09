@@ -4,15 +4,17 @@ terraform-aws-oauth2-authenticator
 Generic single-tenant OAuth2.0 authenticator that puts tokens in Parameter Store.
 
 ```hcl
-module "" {
+module "authenticator" {
   source = "github.com/skeggse/terraform-aws-oauth2-authenticator"
-  name = "authenticator"
 
+  # Prefix for resource names.
+  name             = "authenticator"
   parameter_prefix = "/Dev/TenantCredentials"
 
   services = {
     google = {
-      client_id = "EXAMPLE.apps.googleusercontent.com"
+      client_id                    = "EXAMPLE.apps.googleusercontent.com"
+      client_secret_parameter_name = "/Dev/ServiceProviders/GoogleClient"
       extra_params = {
         access_type = "offline"
       }
@@ -32,7 +34,8 @@ module "" {
     }
 
     fitbit = {
-      client_id = "EXAMPLE"
+      client_id                    = "EXAMPLE"
+      client_secret_parameter_name = "/Dev/ServiceProviders/FitbitClient"
       scopes    = ["heartrate"]
 
       authorization_endpoint = "https://www.fitbit.com/oauth2/authorize"

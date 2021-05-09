@@ -12,6 +12,7 @@ import boto3
 import requests
 
 region = environ.get('AWS_REGION')
+ssm_client = boto3.client('ssm', region_name=region)
 
 cors_headers = frozenset({'access-control-request-method', 'access-control-request-headers'})
 desired_headers = frozenset({*cors_headers, 'origin', 'host'})
@@ -21,6 +22,7 @@ desired_headers = frozenset({*cors_headers, 'origin', 'host'})
 class ServiceConfig(object):
     service_name: str
     client_id: str
+    client_secret_parameter_name: str
     parameter_name: str
     identity_field: str
     permitted_identities: FrozenSet[str]
@@ -28,9 +30,17 @@ class ServiceConfig(object):
     # TODO: enum?
     token_endpoint_auth_method: str
 
+    # @memoized
+    def get_secret(self):
+        return json.loads(
+            ssm_client.get_parameter(Name=self.client_secret_parameter_name, WithDecryption=True)
+        )
+
 
 services = {
-    name: ServiceConfig(**config, permitted_identities=frozenset(config['permitted_identities']))
+    name: ServiceConfig(
+        service_name=name, **config, permitted_identities=frozenset(config['permitted_identities'])
+    )
     for name, config in json.loads(environ.get('SERVICES')).items()
 }
 
@@ -89,15 +99,13 @@ def lambda_handler(event, context):
     if not compare_digest(service_config.client_id.encode(), params['client_id'].encode()):
         return res(403, 'Wrong client_id')
 
-    ssm = boto3.client('ssm', region_name=region)
-
+    client_secret = service_config.get_secret()["client_secret"]
     token_request = dict(
         headers={},
         body=dict(
             code=code,
             redirect_uri=service_config.redirect_uri,
             client_id=service_config.client_id,
-            client_secret=client_secret,
             grant_type='authorization_code',
         )
     )
@@ -121,6 +129,8 @@ def lambda_handler(event, context):
     id_token = data.get('id_token')
     if id_token is None:
         return res(500, 'No identity provided')
+
+    # We trust that this token is not forged, because we received it from Google over TLS.
     identity = decode_jwt_unvalidated(id_token)
 
     # Explicitly handle Google's terrible design where they provide the email in a field labeled
@@ -128,8 +138,9 @@ def lambda_handler(event, context):
     if not identity.get('email_verified', True):
         return res(403, 'Unverified users not permitted')
 
-    if identity.get(service_config.identity_field) not in service_config.permitted_identities:
-        return res(403, 'Access denied')
+    identity_value = identity.get(service_config.identity_field)
+    if identity_value not in service_config.permitted_identities:
+        return res(403, f'Access denied for {identity_value}')
 
     access_token = data.get('access_token')
     refresh_token = data.get('refresh_token')
@@ -144,7 +155,7 @@ def lambda_handler(event, context):
     # expires_at = datetime.timestamp(request_start + timedelta(seconds=data.get('expires_in', 3600)))
     param_name = service_config.parameter_name
     # TODO: will this overwrite the description?
-    result = ssm.put_parameter(
+    result = ssm_client.put_parameter(
         Name=param_name,
         Value=json.dumps(dict(refresh_token=refresh_token)),
         Type='SecureString',
