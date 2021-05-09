@@ -30,16 +30,22 @@ class ServiceConfig(object):
     # TODO: enum?
     token_endpoint_auth_method: str
 
+    redirect_uri: str
+
     # @memoized
     def get_secret(self):
         return json.loads(
-            ssm_client.get_parameter(Name=self.client_secret_parameter_name, WithDecryption=True)
+            ssm_client.get_parameter(Name=self.client_secret_parameter_name,
+                                     WithDecryption=True)['Parameter']['Value']
         )
 
 
 services = {
     name: ServiceConfig(
-        service_name=name, **config, permitted_identities=frozenset(config['permitted_identities'])
+        service_name=name,
+        **{
+            **config, "permitted_identities": frozenset(config['permitted_identities'])
+        }
     )
     for name, config in json.loads(environ.get('SERVICES')).items()
 }
@@ -77,7 +83,7 @@ def lambda_handler(event, context):
         # response, but it's better safe than sorry.
         return res(403, 'Cross-origin requests not supported')
 
-    params = event['queryStringParameters']
+    params = event.get('queryStringParameters', {})
     error = params.get('error')
     if error is not None:
         # Reflections can be a bit scary, but with text/plain this _might_ be ok. We already try to
@@ -89,20 +95,22 @@ def lambda_handler(event, context):
     code = params.get('code')
     if code is None:
         return res(400, 'Missing code parameter')
-    service_name = event['path'][1:event['path'].index('/', 1)]
+    service_name = event['rawPath'][1:event['rawPath'].index('/', 1)]
     service_config = services.get(service_name)
     if service_config is None:
         return res(404, 'Not found')
 
     # Even though client_id isn't particularly private, we can still protect it against leaks via
     # timing attacks.
-    if not compare_digest(service_config.client_id.encode(), params['client_id'].encode()):
+    provided_client_id = params.get('client_id')
+    if (provided_client_id is not None
+            and not compare_digest(service_config.client_id.encode(), provided_client_id.encode())):
         return res(403, 'Wrong client_id')
 
     client_secret = service_config.get_secret()["client_secret"]
     token_request = dict(
         headers={},
-        body=dict(
+        data=dict(
             code=code,
             redirect_uri=service_config.redirect_uri,
             client_id=service_config.client_id,
@@ -110,7 +118,7 @@ def lambda_handler(event, context):
         )
     )
     if service_config.token_endpoint_auth_method == 'parameter':
-        token_request['body']['client_secret'] = client_secret
+        token_request['data']['client_secret'] = client_secret
     elif service_config.token_endpoint_auth_method == 'header':
         auth_value = base64.b64encode(f'{client_id}:{client_secret}')
         token_request['headers']['authorization'] = f'Basic {auth_value}'
@@ -119,13 +127,28 @@ def lambda_handler(event, context):
         return res(500, 'Internal server error')
 
     # request_start = datetime.now(tz=timezone.utc)
-    res = requests.post(service_config.token_endpoint, **token_request)
-    if not res.ok:
-        print(f'Failed to exchange code for refresh_token: {res.text}')
+    response = requests.post(service_config.token_endpoint, **token_request)
+    if not response.ok:
+        try:
+            data = response.json()
+            if data.get('error') == 'invalid_grant':
+                description = data.get('error_description')
+                print(
+                    f'Failed to exchange code due to invalid_grant: [{response.status_code}] {description}'
+                )
+                return res(400, 'Provided grant not valid')
+        except Exception as err:
+            # From simplejson.
+            if type(err).__name__ != 'JSONDecodeError':
+                raise
+
+        print(
+            f'Failed to exchange code for refresh_token: [{response.status_code}] {response.text}'
+        )
         return res(500, 'Failed to authenticate with service provider')
 
     # TODO: handle decreased scope set?
-    data = res.json()
+    data = response.json()
     id_token = data.get('id_token')
     if id_token is None:
         return res(500, 'No identity provided')

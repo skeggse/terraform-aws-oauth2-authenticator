@@ -1,15 +1,3 @@
-resource "aws_ssm_parameter" "secret" {
-  name        = "${var.parameter_prefix}/${var.service_name}"
-  description = "The ${var.service_name} credentials for ${var.name}"
-  type        = "SecureString"
-  value       = "PLACEHOLDER"
-
-  lifecycle {
-    # Managed by the callback lambda.
-    ignore_changes = [value]
-  }
-}
-
 resource "aws_apigatewayv2_route" "route" {
   api_id    = var.api_id
   route_key = "GET ${local.callback_route}"
@@ -46,10 +34,6 @@ locals {
   ])
 
   initial_url = "${var.authorization_endpoint}?${local.encoded_initial_params}"
-}
-
-output "secret_parameter" {
-  value = aws_ssm_parameter.secret.name
 }
 
 output "urls" {

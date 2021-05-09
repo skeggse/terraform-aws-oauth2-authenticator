@@ -72,18 +72,32 @@ resource "aws_lambda_function" "callback" {
         service_name => {
           client_id                    = config.client_id
           client_secret_parameter_name = config.client_secret_parameter_name
-          # TODO: fix dependency cycle
-          parameter_name             = "${local.parameter_prefix}/${service_name}" # module.services[service_name].secret_parameter
-          identity_field             = config.identity_field
-          permitted_identities       = config.permitted_identities
-          token_endpoint             = config.token_endpoint
-          token_endpoint_auth_method = config.token_endpoint_auth_method
+          parameter_name               = aws_ssm_parameter.secret[service_name].secret_parameter
+          identity_field               = config.identity_field
+          permitted_identities         = config.permitted_identities
+          token_endpoint               = config.token_endpoint
+          token_endpoint_auth_method   = config.token_endpoint_auth_method
+          # TODO: resolve circular dependency
+          redirect_uri = "${aws_apigatewayv2_api.interface.api_endpoint}/${urlencode(service_name)}/callback"
         }
       })
     }
   }
 }
 
+resource "aws_ssm_parameter" "secret" {
+  for_each = var.services
+
+  name        = "${local.parameter_prefix}/${each.key}"
+  description = "The ${each.key} credentials for ${var.name}"
+  type        = "SecureString"
+  value       = "PLACEHOLDER"
+
+  lifecycle {
+    # Managed by the callback lambda.
+    ignore_changes = [value]
+  }
+}
 
 module "services" {
   for_each = var.services

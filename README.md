@@ -4,11 +4,11 @@ terraform-aws-oauth2-authenticator
 Generic single-tenant OAuth2.0 authenticator that puts tokens in Parameter Store.
 
 ```hcl
-module "authenticator" {
+module "authorizer" {
   source = "github.com/skeggse/terraform-aws-oauth2-authenticator"
 
   # Prefix for resource names.
-  name             = "authenticator"
+  name             = "authorizer"
   parameter_prefix = "/Dev/TenantCredentials"
 
   services = {
