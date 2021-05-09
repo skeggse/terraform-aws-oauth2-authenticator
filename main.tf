@@ -74,6 +74,7 @@ resource "aws_lambda_function" "callback" {
           client_secret_parameter_name = config.client_secret_parameter_name
           parameter_name               = aws_ssm_parameter.secret[service_name].name
           identity_field               = config.identity_field
+          identify_with_openid         = config.identify_with_openid
           permitted_identities         = config.permitted_identities
           token_endpoint               = config.token_endpoint
           token_endpoint_auth_method   = config.token_endpoint_auth_method

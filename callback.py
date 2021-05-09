@@ -25,6 +25,7 @@ class ServiceConfig(object):
     client_secret_parameter_name: str
     parameter_name: str
     identity_field: str
+    identify_with_openid: bool
     permitted_identities: FrozenSet[str]
     token_endpoint: str
     # TODO: enum?
@@ -120,8 +121,8 @@ def lambda_handler(event, context):
     if service_config.token_endpoint_auth_method == 'parameter':
         token_request['data']['client_secret'] = client_secret
     elif service_config.token_endpoint_auth_method == 'header':
-        auth_value = base64.b64encode(f'{client_id}:{client_secret}')
-        token_request['headers']['authorization'] = f'Basic {auth_value}'
+        auth_value = base64.b64encode(f'{service_config.client_id}:{client_secret}'.encode())
+        token_request['headers']['authorization'] = f'Basic {auth_value.decode()}'
     else:
         print(f'service {service_name} did not define a valid token_endpoint_auth_method')
         return res(500, 'Internal server error')
@@ -149,12 +150,15 @@ def lambda_handler(event, context):
 
     # TODO: handle decreased scope set?
     data = response.json()
-    id_token = data.get('id_token')
-    if id_token is None:
-        return res(500, 'No identity provided')
+    if service_config.identify_with_openid:
+        id_token = data.get('id_token')
+        if id_token is None:
+            return res(500, 'No identity provided')
 
-    # We trust that this token is not forged, because we received it from Google over TLS.
-    identity = decode_jwt_unvalidated(id_token)
+        # We trust that this token is not forged, because we received it from Google over TLS.
+        identity = decode_jwt_unvalidated(id_token)
+    else:
+        identity = data
 
     # Explicitly handle Google's terrible design where they provide the email in a field labeled
     # email even when it's not verified.
