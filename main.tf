@@ -70,14 +70,14 @@ resource "aws_lambda_function" "callback" {
       SERVICES = jsonencode({
         for service_name, config in var.services :
         service_name => {
-          client_id                    = config.client_id
-          client_secret_parameter_name = config.client_secret_parameter_name
-          parameter_name               = aws_ssm_parameter.secret[service_name].name
-          identity_field               = config.identity_field
-          identify_with_openid         = config.identify_with_openid == true
-          permitted_identities         = config.permitted_identities
-          token_endpoint               = config.token_endpoint
-          token_endpoint_auth_method   = config.token_endpoint_auth_method
+          client_id                  = config.client_id
+          secret_parameter           = config.secret_parameter
+          parameter_name             = aws_ssm_parameter.secret[service_name].name
+          identity_field             = config.identity_field
+          identify_with_openid       = config.identify_with_openid == true
+          permitted_identities       = config.permitted_identities
+          token_endpoint             = config.token_endpoint
+          token_endpoint_auth_method = config.token_endpoint_auth_method
           # TODO: resolve circular dependency
           redirect_uri = "${aws_apigatewayv2_api.interface.api_endpoint}/${urlencode(service_name)}/callback"
         }

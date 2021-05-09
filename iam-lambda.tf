@@ -17,7 +17,7 @@ data "aws_iam_policy_document" "callback-policy" {
     ]
     resources = [
       for _, config in var.services :
-      "arn:aws:ssm:${local.local_arn_infix}:parameter/${trimprefix(config.client_secret_parameter_name, "/")}"
+      "arn:aws:ssm:${local.local_arn_infix}:parameter/${trimprefix(config.secret_parameter, "/")}"
     ]
   }
 

@@ -42,8 +42,8 @@ Usage
 
      services = {
        google = {
-         client_id                    = "EXAMPLE.apps.googleusercontent.com"
-         client_secret_parameter_name = "/Dev/ServiceProviders/GoogleClient"
+         client_id        = "EXAMPLE.apps.googleusercontent.com"
+         secret_parameter = "/Dev/ServiceProviders/GoogleClient"
          extra_params = {
            access_type = "offline"
          }
@@ -63,8 +63,8 @@ Usage
        }
 
        fitbit = {
-         client_id                    = "EXAMPLE"
-         client_secret_parameter_name = "/Dev/ServiceProviders/FitbitClient"
+         client_id        = "EXAMPLE"
+         secret_parameter = "/Dev/ServiceProviders/FitbitClient"
          scopes    = ["heartrate"]
 
          authorization_endpoint = "https://www.fitbit.com/oauth2/authorize"

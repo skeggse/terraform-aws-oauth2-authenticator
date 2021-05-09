@@ -18,10 +18,10 @@ variable "parameter_prefix" {
 variable "services" {
   type = map(
     object({
-      client_id                    = string
-      client_secret_parameter_name = string
-      extra_params                 = optional(map(string))
-      scopes                       = set(string)
+      client_id        = string
+      secret_parameter = string
+      extra_params     = optional(map(string))
+      scopes           = set(string)
 
       # The web endpoint that serves as the starting point for the OAuth2.0 flow
       # Example: https://accounts.google.com/o/oauth2/v2/auth

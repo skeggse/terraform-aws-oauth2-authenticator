@@ -22,7 +22,7 @@ desired_headers = frozenset({*cors_headers, 'origin', 'host'})
 class ServiceConfig(object):
     service_name: str
     client_id: str
-    client_secret_parameter_name: str
+    secret_parameter: str
     parameter_name: str
     identity_field: str
     identify_with_openid: bool
@@ -36,7 +36,7 @@ class ServiceConfig(object):
     # @memoized
     def get_secret(self):
         return json.loads(
-            ssm_client.get_parameter(Name=self.client_secret_parameter_name,
+            ssm_client.get_parameter(Name=self.secret_parameter,
                                      WithDecryption=True)['Parameter']['Value']
         )
 
@@ -63,7 +63,7 @@ def res(status: int, body: str, content_type='text/plain; charset=utf-8'):
 def decode_jwt_unvalidated(jwt: str):
     start_index = jwt.index('.')
     end_index = jwt.index('.', start_index + 1)
-    padding = '===' [:(4 - (end_index - start_index - 1)) % 4]
+    padding = '==='[:(4 - (end_index - start_index - 1)) % 4]
     return json.loads(base64.b64decode(jwt[start_index + 1:end_index] + padding, validate=False))
 
 
