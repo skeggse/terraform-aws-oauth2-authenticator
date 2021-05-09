@@ -72,7 +72,7 @@ resource "aws_lambda_function" "callback" {
         service_name => {
           client_id                    = config.client_id
           client_secret_parameter_name = config.client_secret_parameter_name
-          parameter_name               = aws_ssm_parameter.secret[service_name].secret_parameter
+          parameter_name               = aws_ssm_parameter.secret[service_name].name
           identity_field               = config.identity_field
           permitted_identities         = config.permitted_identities
           token_endpoint               = config.token_endpoint
