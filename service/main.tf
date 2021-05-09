@@ -23,7 +23,7 @@ locals {
       prompt        = "consent"
       response_type = "code"
       scope = (
-        join(" ", setunion(var.scopes, var.identify_with_openid ? ["openid email"] : []))
+        join(" ", setunion(var.scopes, var.identify_with_openid == true ? ["openid email"] : []))
       )
     }
   )
