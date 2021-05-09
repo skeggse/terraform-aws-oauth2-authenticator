@@ -111,6 +111,7 @@ module "services" {
   authorization_endpoint = each.value.authorization_endpoint
   token_endpoint         = each.value.token_endpoint
   permitted_identities   = each.value.permitted_identities
+  identify_with_openid   = each.value.identify_with_openid
   parameter_prefix       = local.parameter_prefix
 
   api_id             = aws_apigatewayv2_api.interface.id
