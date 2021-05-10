@@ -53,7 +53,7 @@ def memoize_dynamic(timeout_fn):
             now = time.monotonic()
             if prior is not None and now < prior[0]:
                 return prior[1]
-            value = fn(params)
+            value = fn(*params)
             expiry_mapping[params] = now + timeout_fn(value), value
             return value
 
