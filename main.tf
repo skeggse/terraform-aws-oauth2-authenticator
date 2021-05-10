@@ -124,6 +124,13 @@ module "services" {
   api_endpoint       = aws_apigatewayv2_api.interface.api_endpoint
 }
 
+output "service_token_parameters" {
+  value = {
+    for service_name, secret in aws_ssm_parameter.secret :
+    service_name => secret.name
+  }
+}
+
 output "service_urls" {
   value = {
     for service_name, config in var.services :

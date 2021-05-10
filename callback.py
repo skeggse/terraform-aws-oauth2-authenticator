@@ -40,27 +40,37 @@ class AuthMethod(Enum):
     PARAMETER = ('parameter', auth_param)
 
 
-def memoize_with_timeout(timeout_sec):
+def memoize_dynamic(timeout_fn):
     def inner(fn):
-        expiry_mapping = weakref.WeakKeyDictionary()
+        expiry_mapping = {}
 
-        def reset(key: Any):
-            if key in expiry_mapping:
-                del expiry_mapping[key]
+        def reset(*params):
+            if params in expiry_mapping:
+                del expiry_mapping[params]
 
-        def get(key: Any):
-            value = expiry_mapping.get(key)
+        def get(*params):
+            prior = expiry_mapping.get(params)
             now = time.monotonic()
-            if value is not None and now < value[0]:
-                return value[1]
-            value = fn(key)
-            expiry_mapping[key] = now + timeout_sec, value
+            if prior is not None and now < prior[0]:
+                return prior[1]
+            value = fn(params)
+            expiry_mapping[params] = now + timeout_fn(value), value
             return value
 
         get.reset = reset
         return get
 
     return inner
+
+
+def memoize_with_timeout(timeout_sec):
+    return memoize_dynamic(lambda _: timeout_sec)
+
+
+def memoize_with_expiry(grace_period_sec, default_valid_sec):
+    return memoize_dynamic(
+        lambda value: value.get('expires_in', default_valid_sec) - grace_period_sec
+    )
 
 
 @dataclass(frozen=True)
