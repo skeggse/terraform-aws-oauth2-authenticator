@@ -65,7 +65,7 @@ Usage
        fitbit = {
          client_id        = "EXAMPLE"
          secret_parameter = "/Dev/ServiceProviders/FitbitClient"
-         scopes    = ["heartrate"]
+         scopes           = ["heartrate"]
 
          authorization_endpoint = "https://www.fitbit.com/oauth2/authorize"
          token_endpoint         = "https://api.fitbit.com/oauth2/token"
